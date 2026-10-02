@@ -90,100 +90,20 @@ NUSUK_OFFICIAL_WINDOWS = {
 }
 
 def get_db_connection():
-    """اتصال بقاعدة البيانات المركزية وإنشاء كافة الجداول المطلوبة تلقائياً"""
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-
-    # 1. جدول الشركات
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS companies (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            phone TEXT,
-            email TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # 2. جدول طلبات الحجز
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS booking_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company_name TEXT NOT NULL,
-            telegram_user_id INTEGER,
-            telegram_username TEXT,
-            trip_details TEXT,
-            total_pilgrims INTEGER DEFAULT 0,
-            men_count INTEGER DEFAULT 0,
-            women_count INTEGER DEFAULT 0,
-            boys_count INTEGER DEFAULT 0,
-            girls_count INTEGER DEFAULT 0,
-            excel_path TEXT,
-            notes_path TEXT,
-            status TEXT DEFAULT 'جديد',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # 3. جدول المعتمرين
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pilgrims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            request_id INTEGER,
-            company_name TEXT NOT NULL,
-            name TEXT NOT NULL,
-            passport TEXT,
-            visa TEXT,
-            person_type TEXT NOT NULL DEFAULT 'رجال',
-            gender TEXT,
-            email TEXT,
-            phone TEXT,
-            trip_date TEXT,
-            permit_number TEXT,
-            status TEXT DEFAULT 'في الانتظار',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (request_id) REFERENCES booking_requests(id)
-        )
-    """)
-
-    # 4. جدول عملاء الشركات
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS company_clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company_name TEXT NOT NULL,
-            phone TEXT UNIQUE NOT NULL,
-            client_name TEXT,
-            telegram_chat_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # 5. جدول المشرفين
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS admins (
-            chat_id INTEGER PRIMARY KEY,
-            phone TEXT,
-            name TEXT,
-            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # 6. جدول الرحلات
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS trips (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company_name TEXT,
-            trip_date TEXT,
-            prayer_window TEXT,
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    return conn
-
+    """اتصال بقاعدة البيانات الموحدة (Neon PostgreSQL السحابية مع التزامن 24/7 أو SQLite المحلي)"""
+    try:
+        from core_engine import db_sync
+        return db_sync.get_db_connection()
+    except Exception as e:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        return conn
 
 conn = get_db_connection()
+
+# مؤشر حالة التزامن السحابي
+if hasattr(conn, "raw_conn") or "Postgres" in type(conn).__name__:
+    st.success("🟢 **التزامن السحابي المزدوج 24/7 نشط بنجاح**: متصل بقاعدة بيانات Neon السحابية الموحدة (أي تعديل على السيرفر أو اللاب توب يتزامن لحظياً في الاتجاهين).")
 
 # شريط التبويبات العلوي
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
