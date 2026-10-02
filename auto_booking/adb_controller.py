@@ -205,8 +205,24 @@ class AdbController:
         return False
 
     def type_text(self, text: str, delay: float = 0.3):
-        """كتابة نص داخل الحقل المحدد"""
-        escaped = str(text).replace(" ", "%s").replace("&", "\&").replace("<", "\<").replace(">", "\>")
+        """كتابة نص داخل الحقل المحدد مع معالجة كافة الرموز الخاصة مثل $ و &"""
+        escaped = str(text)
+        for ch, rep in [
+            ("\\", "\\\\"),
+            ("\"", "\\\""),
+            ("'", "\\'"),
+            ("$", "\\$"),
+            ("&", "\\&"),
+            ("<", "\\<"),
+            (">", "\\>"),
+            ("`", "\\`"),
+            ("(", "\\("),
+            (")", "\\)"),
+            (";", "\\;"),
+            ("|", "\\|"),
+            (" ", "%s")
+        ]:
+            escaped = escaped.replace(ch, rep)
         self.run("shell", "input", "text", escaped)
         if delay > 0:
             time.sleep(delay)

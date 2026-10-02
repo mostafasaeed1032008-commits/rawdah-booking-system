@@ -839,27 +839,54 @@ with tab8:
         parse_pasted_text = None
         st.info("ℹ️ محرك الأتمتة المباشرة بالمحاكي (ADB) مخصص للتشغيل على جهاز الكمبيوتر المكتبي المتصل بمحاكي الأندرويد. يمكنك إدارة كافة الكشوفات والبيانات وتصديرها بالكامل عبر هذه النسخة السحابية.")
 
+    # اختيار مصدر هاتف الحجز (محلي أو سحابي عبر Damru / Redroid)
+    c_src1, c_src2 = st.columns([1.5, 2])
+    with c_src1:
+        device_source = st.radio(
+            "اختر بيئة تشغيل هاتف الحجز:",
+            [
+                "💻 محاكي MuMu Player المحلي (على هذا الجهاز)",
+                "☁️ هواتف Damru & Redroid السحابية (على سيرفر خارجي 0% RAM)"
+            ],
+            index=0,
+            key="bot_device_source"
+        )
+
+    target_serial = ""
+    with c_src2:
+        if "Damru" in device_source:
+            c_rip, c_rport = st.columns([2, 1])
+            with c_rip:
+                vps_ip = st.text_input("عنوان السيرفر السحابي (VPS IP):", value=os.environ.get("DAMRU_VPS_IP", "127.0.0.1"), key="damru_vps_ip")
+            with c_rport:
+                vps_port = st.number_input("المنفذ (Port):", min_value=1000, max_value=65535, value=5555, key="damru_vps_port")
+            target_serial = f"{vps_ip}:{vps_port}"
+            st.caption("🛡️ تشغيل خفي 100% عبر Damru OS-level Spoofing بدون أي استهلاك لرامات لابتوبك.")
+
     # شريط حالة المحاكي والعقل المدبر
     c_stat1, c_stat2 = st.columns([2, 1])
     with c_stat1:
         if AdbController:
-            adb_test = AdbController()
+            adb_test = AdbController(serial=target_serial)
             is_conn = adb_test.is_connected()
             if is_conn:
-                st.success(f"🟢 المحاكي متصل وجاهز للعمل! (المعرف: `{adb_test.serial}`)")
+                st.success(f"🟢 الهاتف متصل وجاهز للعمل! (المعرف: `{adb_test.serial}`)")
             else:
-                st.warning("⚪ المحاكي غير متصل حالياً. يرجى فتح محاكي MuMu Player ثم الضغط على فحص الاتصال.")
+                if "Damru" in device_source:
+                    st.warning(f"⚪ تعذر الاتصال بالهاتف السحابي على `{target_serial}`. تأكد من تشغيل سكريبت setup_damru_vps.sh على السيرفر.")
+                else:
+                    st.warning("⚪ المحاكي غير متصل حالياً. يرجى فتح محاكي MuMu Player ثم الضغط على فحص الاتصال.")
         else:
             st.info("محرك ADB قيد التهيئة...")
 
     with c_stat2:
-        if st.button("🔄 فحص الاتصال بالمحاكي الآن"):
+        if st.button("🔄 فحص الاتصال بالهاتف الآن"):
             if AdbController:
-                adb_test = AdbController()
+                adb_test = AdbController(serial=target_serial)
                 if adb_test.connect():
-                    st.success("✅ تم الاتصال بالمحاكي بنجاح!")
+                    st.success("✅ تم الاتصال بالهاتف بنجاح!")
                 else:
-                    st.error("❌ تعذر الاتصال. تأكد من تشغيل محاكي MuMu Player.")
+                    st.error("❌ تعذر الاتصال بالهاتف المحدد.")
             st.rerun()
 
     # لوحة تحكم العقل المدبر (Gemini AI Brain)
