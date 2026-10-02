@@ -1,0 +1,64 @@
+# ===== منظومة حجز الروضة الشريفة - .gitignore =====
+
+# البيئة الافتراضية
+.venv/
+venv/
+env/
+
+# الملفات السرية (لا ترفعها أبداً!)
+.env
+*.env
+!.env.example
+
+# قاعدة البيانات (تبقى محلية)
+database/*.db
+database/rawdah_central.db
+
+# ملفات الكاش والمؤقتة
+auto_booking/cache/
+auto_booking/training_data/*.json
+auto_booking/training_data/*.mp4
+telegram_bot/temp_uploads/
+core_engine/otp_queue.json
+core_engine/processed_records.json
+core_engine/processed_records_backup.json
+core_engine/used_emails.json
+core_engine/used_emails_backup.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# أدوات ADB (ملفات كبيرة - تتنزل منفصلة)
+auto_booking/tools/platform-tools/
+auto_booking/tools/*.zip
+
+# ملفات الشركات والبيانات الشخصية
+الشركات/
+
+# ملفات تجريبية
+check_screen.py
+find_activity.py
+peek_screen.py
+test_full_booking.py
+
+# Windows
+Thumbs.db
+desktop.ini
+*.lnk
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# Logs
+*.log
+logs/

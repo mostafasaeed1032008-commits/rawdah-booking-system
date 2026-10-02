@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # ===== الداشبورد الرئيسي =====
+  dashboard:
+    build: .
+    container_name: rawdah_dashboard
+    restart: always
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./database:/app/database          # قاعدة البيانات محلية (تستمر بعد الريستارت)
+      - ./الشركات:/app/الشركات            # ملفات الشركات
+      - ./auto_booking/cache:/app/auto_booking/cache
+      - ./auto_booking/training_data:/app/auto_booking/training_data
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADB_HOST=${ADB_HOST:-127.0.0.1}   # IP جهاز المحاكي (لو ADB عن بُعد)
+      - ADB_PORT=${ADB_PORT:-16384}
+    command: >
+      python -m streamlit run dashboard/dashboard.py
+      --server.port=8502
+      --server.address=0.0.0.0
+      --server.headless=true
+      --browser.gatherUsageStats=false
+    networks:
+      - rawdah_net
+
+  # ===== بوت التليجرام =====
+  telegram_bot:
+    build: .
+    container_name: rawdah_telegram
+    restart: always
+    volumes:
+      - ./database:/app/database
+      - ./telegram_bot/temp_uploads:/app/telegram_bot/temp_uploads
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADB_HOST=${ADB_HOST:-127.0.0.1}
+      - ADB_PORT=${ADB_PORT:-16384}
+    command: python telegram_bot/bot.py
+    depends_on:
+      - dashboard
+    networks:
+      - rawdah_net
+
+networks:
+  rawdah_net:
+    driver: bridge
+
+volumes:
+  rawdah_db:
