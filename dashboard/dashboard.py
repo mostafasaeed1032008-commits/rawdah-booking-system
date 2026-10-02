@@ -1,4 +1,4 @@
-﻿import io
+import io
 import os
 import sqlite3
 import sys
@@ -10,23 +10,19 @@ import streamlit as st
 # المسارات الأساسية للنظام (ديناميكية وتعمل محلياً وعلى Streamlit Cloud)
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 COMPANIES_DIR = PROJECT_ROOT / "الشركات"
+DB_PATH = PROJECT_ROOT / "database" / "rawdah_central.db"
 
-# مسار قاعدة البيانات - يعمل على Streamlit Cloud وعلى الجهاز المحلي
-_local_db = PROJECT_ROOT / "database" / "rawdah_central.db"
-_cloud_db = Path(os.environ.get("HOME", "/tmp")) / "rawdah_central.db"
-if _local_db.exists():
-    DB_PATH = _local_db
-elif (PROJECT_ROOT / "database").exists():
-    DB_PATH = _local_db
-else:
-    # على Streamlit Cloud: نستخدم مجلد مؤقت قابل للكتابة
-    DB_PATH = _cloud_db
-
-# نضمن إن مجلد الـ DB موجود
+# ضمان وجود مجلدات النظام وقاعدة البيانات
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+COMPANIES_DIR.mkdir(parents=True, exist_ok=True)
 
-sys.path.insert(0, str(PROJECT_ROOT / "core_engine"))
-sys.path.insert(0, str(PROJECT_ROOT / "telegram_bot"))
+# إضافة مسارات المشروع إلى sys.path
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / "core_engine") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "core_engine"))
+if str(PROJECT_ROOT / "telegram_bot") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "telegram_bot"))
 
 try:
     import email_pool
@@ -76,36 +72,116 @@ st.markdown("""
 st.title("🕋 منظومة إدارة معتمري الروضة الشريفة وتصاريح الشركات")
 st.caption("نظام مركزي متكامل يعرض كافة بيانات المعتمرين مصنفة بالشركات مع التمييز الدقيق بين الرجال، النساء، الأطفال (ذكور)، والطفلات (إناث).")
 
+# الفترات والمواعيد الرسمية لتطبيق نسك (مرجع أساسي يمنع أي أخطاء)
+NUSUK_OFFICIAL_WINDOWS = {
+    "رجال": [
+        {"time": "04:00 ص - 05:00 ص", "label": "فجر مبكر 🌙", "period": "الفجر"},
+        {"time": "05:00 ص - 06:30 ص", "label": "بعد صلاة الفجر 🌅", "period": "الفجر"},
+        {"time": "06:30 ص - 08:30 ص", "label": "الضحى / الصباح ☀️", "period": "الضحى"},
+        {"time": "08:00 م - 09:30 م", "label": "بعد صلاة العشاء 🕌", "period": "العشاء"},
+        {"time": "09:30 م - 11:00 م", "label": "فترة مسائية أولى 🌌", "period": "العشاء"},
+        {"time": "11:00 م - 12:30 ص", "label": "منتصف الليل 🌃", "period": "الليل"}
+    ],
+    "نساء": [
+        {"time": "06:00 ص - 08:00 ص", "label": "بعد صلاة الفجر صباحاً 🌅", "period": "الصباح"},
+        {"time": "08:00 ص - 10:30 ص", "label": "فترة الضحى للنساء ☀️", "period": "الضحى"},
+        {"time": "09:30 م - 11:30 م", "label": "الفترة المسائية للنساء 🌌", "period": "المساء"}
+    ]
+}
+
 def get_db_connection():
-    """اتصال بقاعدة البيانات - ينشئها لو مش موجودة"""
+    """اتصال بقاعدة البيانات المركزية وإنشاء كافة الجداول المطلوبة تلقائياً"""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    # إنشاء الجداول لو مش موجودة (أول تشغيل على Cloud)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pilgrims (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT, gender TEXT, passport TEXT, visa TEXT,
-            email TEXT, phone TEXT, company_name TEXT, trip_date TEXT,
-            person_type TEXT, status TEXT DEFAULT 'pending',
-            permit_number TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+
+    # 1. جدول الشركات
     conn.execute("""
         CREATE TABLE IF NOT EXISTS companies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE, phone TEXT, email TEXT,
+            name TEXT UNIQUE NOT NULL,
+            phone TEXT,
+            email TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # 2. جدول طلبات الحجز
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS booking_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            telegram_user_id INTEGER,
+            telegram_username TEXT,
+            trip_details TEXT,
+            total_pilgrims INTEGER DEFAULT 0,
+            men_count INTEGER DEFAULT 0,
+            women_count INTEGER DEFAULT 0,
+            boys_count INTEGER DEFAULT 0,
+            girls_count INTEGER DEFAULT 0,
+            excel_path TEXT,
+            notes_path TEXT,
+            status TEXT DEFAULT 'جديد',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 3. جدول المعتمرين
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pilgrims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id INTEGER,
+            company_name TEXT NOT NULL,
+            name TEXT NOT NULL,
+            passport TEXT,
+            visa TEXT,
+            person_type TEXT NOT NULL DEFAULT 'رجال',
+            gender TEXT,
+            email TEXT,
+            phone TEXT,
+            trip_date TEXT,
+            permit_number TEXT,
+            status TEXT DEFAULT 'في الانتظار',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (request_id) REFERENCES booking_requests(id)
+        )
+    """)
+
+    # 4. جدول عملاء الشركات
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS company_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            phone TEXT UNIQUE NOT NULL,
+            client_name TEXT,
+            telegram_chat_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 5. جدول المشرفين
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admins (
+            chat_id INTEGER PRIMARY KEY,
+            phone TEXT,
+            name TEXT,
+            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 6. جدول الرحلات
     conn.execute("""
         CREATE TABLE IF NOT EXISTS trips (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company_name TEXT, trip_date TEXT, prayer_window TEXT,
-            notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            company_name TEXT,
+            trip_date TEXT,
+            prayer_window TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
     return conn
+
 
 conn = get_db_connection()
 
@@ -830,7 +906,9 @@ with tab8:
         from auto_booking.adb_controller import AdbController
         from auto_booking.booking_runner import BookingRunner
         from auto_booking.ai_brain import GeminiSupervisor
-        from auto_booking.slot_radar import SlotRadar, NUSUK_OFFICIAL_WINDOWS
+        from auto_booking.slot_radar import SlotRadar, NUSUK_OFFICIAL_WINDOWS as _radar_windows
+        if _radar_windows:
+            NUSUK_OFFICIAL_WINDOWS = _radar_windows
         from auto_booking.pilgrim_importer import parse_excel_file, parse_pasted_text
     except Exception as e:
         AdbController = None
@@ -839,7 +917,7 @@ with tab8:
         SlotRadar = None
         parse_excel_file = None
         parse_pasted_text = None
-        st.error(f"خطأ في تحميل محرك الحجز: {e}")
+        st.info("ℹ️ محرك الأتمتة المباشرة بالمحاكي (ADB) مخصص للتشغيل على جهاز الكمبيوتر المكتبي المتصل بمحاكي الأندرويد. يمكنك إدارة كافة الكشوفات والبيانات وتصديرها بالكامل عبر هذه النسخة السحابية.")
 
     # شريط حالة المحاكي والعقل المدبر
     c_stat1, c_stat2 = st.columns([2, 1])
